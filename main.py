@@ -1,11 +1,11 @@
 import cv2
 import face_recognition
 
-imgElon = face_recognition.load_image_file('image/elontrain.jpg')
-# imgElon = face_recognition.load_image_file('image/Jeff-Bezos-2017.jpg')
+# imgElon = face_recognition.load_image_file('image/elon_selfie_2.jpg')
+imgElon = face_recognition.load_image_file('image/Jeff-Bezos-2017.jpg')
 imgElon = cv2.cvtColor(imgElon, cv2.COLOR_BGR2RGB)
 
-imgTest = face_recognition.load_image_file('image/Elon-Musk-muda.jpg')
+imgTest = face_recognition.load_image_file('image/elon_selfie.jpg')
 imgTest = cv2.cvtColor(imgTest, cv2.COLOR_BGR2RGB)
 
 faceLoc = face_recognition.face_locations(imgElon)[0]

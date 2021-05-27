@@ -1,42 +1,26 @@
 import cv2
-import time
+import numpy as np
 
-# Load the cascade
 face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
 
-# To capture video from webcam.
-cap = cv2.VideoCapture(0)
+def getFaces(title, img_bgr, w_desired, h_desired):
+    # calculating auto crop based on desire image size
+    ratio = w_desired / h_desired
+    ratio_w = ratio if ratio > 1 else 1
+    ratio_h = 1 if ratio > 1 else ratio
 
-# desired_w, desired_h = 400, 400
-desired_w, desired_h = 360, 480
-ratio = desired_w/desired_h
+    # convert to grayscale
+    (img_h, img_w, img_d) = img_bgr.shape
+    img_gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
 
-if ratio > 1:
-    # landscape
-    ratio_w = ratio
-    ratio_h = 1
-else:
-    # potrait
-    ratio_w = 1
-    ratio_h = 1/ratio
-
-while True:
-    start_time = time.time()
-    # Read the frame
-    _, img = cap.read()
-    # Convert to grayscale
-    (img_h, img_w, d) = img.shape
-    img_w, img_h = img_w // 2, img_h // 2
-
-    img = cv2.resize(img, (img_w, img_h))
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    # Detect the faces
-    faces = face_cascade.detectMultiScale(gray, 1.1, 4)
+    # detect all faces if any
+    faces_raw = face_cascade.detectMultiScale(img_gray, 1.1, 4)
+    faces_result = []
 
     # Draw the rectangle around each face
-    for (x, y, w, h) in faces:
+    for (x, y, w, h) in faces_raw:
         if w == 0 or h == 0:
+            # no face detected
             continue
 
         # calculating ratio
@@ -56,21 +40,10 @@ while True:
         x1, x2 = cx - dx, cx + dx
 
         if not (y1 < 0 or x1 < 0 or y2 > img_h or x2 > img_w):
-            image = img[cy - dy:cy + dy, cx - dx:cx + dx]
-            image = cv2.resize(image, (desired_w, desired_h))
-            cv2.imshow('Face', image)
+            image = np.copy(img_bgr[cy - dy:cy + dy, cx - dx:cx + dx])
+            image = cv2.resize(image, (w_desired, h_desired))
+            cv2.imshow('Face: {}'.format(title), image)
+            faces_result.append(image)
 
-        cv2.rectangle(img, (x, y), (x+w, y+h), (255, 0, 0), 2)
-
-    # Display
-    fps = 1/(time.time() - start_time)
-    img = cv2.putText(img, 'FPS: {:.02f} '.format(fps), (12, 12), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1, cv2.LINE_AA)
-    cv2.imshow('img', img)
-
-    # Stop if escape key is pressed
-    k = cv2.waitKey(30) & 0xff
-    if k == 27:
-        break
-
-# Release the VideoCapture object
-cap.release()
+        img_bgr = cv2.rectangle(img_bgr, (x, y), (x+w, y+h), (255, 0, 0), 2)
+    return faces_result
