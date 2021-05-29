@@ -72,7 +72,6 @@ docs = users_ref.stream()
 
 users = [] # {uid: ..., link_ktp: .., link_selfie: ..., img_ktp: ..., img_selfie: ...}
 for doc in docs:
-    print('Downloading Photos: ', doc.id)
     val = doc.to_dict()
 
     # create folder
@@ -80,6 +79,7 @@ for doc in docs:
     os.mkdir(path)
 
     # download & save image: selfie
+    print('Downloading Selfie: ', doc.id)
     file_path = os.path.join(path, 'foto_selfie.jpg')
     saveImage(file_path, requests.get(val['photo_selfie']))
     img_selfie = cv2.imread(file_path)
@@ -90,6 +90,7 @@ for doc in docs:
         continue
 
     # download & save image: ktp
+    print('Downloading KTP: ', doc.id)
     file_path = os.path.join(path, 'foto_ktp.jpg')
     saveImage(file_path, requests.get(val['photo_ktp']))
     img_ktp = cv2.imread(file_path)
@@ -141,3 +142,8 @@ for user in users:
     print('{}: {:.3f}'.format(user['uid'], Dw[0].numpy()))
 
     # TODO: UPDATE FIRESTORE
+    doc_ref = db.collection(u'users').document(u'{}'.format(user['uid']))
+    doc_ref.set({
+        u'status': u'verified' if Dw[0].numpy() < 1 else u'rejected',
+        u'verification_score': u'{:.3f}'.format(Dw[0].numpy()),
+    })

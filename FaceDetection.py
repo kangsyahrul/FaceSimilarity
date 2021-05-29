@@ -49,7 +49,7 @@ def getFaces(title, img_bgr, w_desired, h_desired):
         if not (y1 < 0 or x1 < 0 or y2 > img_h or x2 > img_w):
             image = np.copy(img_bgr[cy - dy:cy + dy, cx - dx:cx + dx])
             image = cv2.resize(image, (w_desired, h_desired))
-            cv2.imshow('Face: {}'.format(title), image)
+            # cv2.imshow('Face: {}'.format(title), image)
             faces_result.append(image)
 
         img_bgr = cv2.rectangle(img_bgr, (x, y), (x+w, y+h), (255, 0, 0), 2)
