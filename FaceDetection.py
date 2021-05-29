@@ -9,6 +9,13 @@ def getFaces(title, img_bgr, w_desired, h_desired):
     ratio_w = ratio if ratio > 1 else 1
     ratio_h = 1 if ratio > 1 else ratio
 
+    # resize image
+    h, w, d = img_bgr.shape
+    if w > h:
+        img_bgr = cv2.resize(img_bgr, (720, h * 720 // w))
+    else:
+        img_bgr = cv2.resize(img_bgr, (w * 720 // h, 720))
+
     # convert to grayscale
     (img_h, img_w, img_d) = img_bgr.shape
     img_gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
