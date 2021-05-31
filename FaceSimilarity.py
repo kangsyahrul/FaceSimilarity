@@ -1,19 +1,57 @@
-import cv2
-import numpy as np
-import os
-from model.DenseNet import *
-import matplotlib.pyplot as plt
-import tensorflow as tf
+#!/usr/bin/env python3
 
-def contrastive_loss(logits1, logits2, label, margin, eps=1e-7):
-    Dw = tf.sqrt(eps + tf.reduce_sum(tf.square(logits1 - logits2), 1))
-    loss = tf.reduce_mean((1. - tf.cast(label, tf.float32))
-                          * tf.square(Dw) + tf.cast(label, tf.float32)
-                          * tf.square(tf.maximum(margin - Dw, 0)))
-    return loss, Dw
+# README: program ini digunakan untuk mendapatkan nilai prediksi dari face similarity
 
 
-# load model
+
+# Collect all users id and photos link
+print('Downloading photos...')
+
+
+
+users = [] # {uid: ..., link_ktp: .., link_selfie: ..., img_ktp: ..., img_selfie: ...}
+for doc in docs:
+    val = doc.to_dict()
+
+    # create folder
+    path = os.path.join('photos', doc.id)
+    os.mkdir(path)
+
+    # download & save image: selfie
+    print('Downloading Selfie: ', doc.id)
+    file_path = os.path.join(path, 'foto_selfie.jpg')
+    saveImage(file_path, requests.get(val['photo_selfie']))
+    img_selfie = cv2.imread(file_path)
+    face_selfie = fd.getFaces('Selfie', img_selfie, WIDTH_DESIRED, HEIGHT_DESIRED)
+    if len(face_selfie) != 1:
+        print('WARNING: Could not verifying selfie photo for {}'.format(doc.id))
+        print('WARNING MESSAGE: no face or multiple faces detected! Total: ', len(face_selfie))
+        continue
+
+    # download & save image: ktp
+    print('Downloading KTP: ', doc.id)
+    file_path = os.path.join(path, 'foto_ktp.jpg')
+    saveImage(file_path, requests.get(val['photo_ktp']))
+    img_ktp = cv2.imread(file_path)
+    face_ktp = fd.getFaces('KTP', img_ktp, WIDTH_DESIRED, HEIGHT_DESIRED)
+    if len(face_ktp) != 1:
+        print('WARNING: Could not verifying ktp photo for {}'.format(doc.id))
+        print('WARNING MESSAGE: no face or multiple faces detected! Total: ', len(face_ktp))
+        continue
+
+    # save faces
+    cv2.imwrite(os.path.join(path, 'face_ktp.jpg'), face_ktp[0])
+    cv2.imwrite(os.path.join(path, 'face_selfie.jpg'), face_selfie[0])
+
+    # convert BGR to RGB
+    face_ktp = cv2.cvtColor(face_ktp[0], cv2.COLOR_BGR2RGB)
+    face_selfie = cv2.cvtColor(face_selfie[0], cv2.COLOR_BGR2RGB)
+    users.append({'uid': doc.id, 'face_ktp': face_ktp, 'face_selfie': face_selfie, 'link_ktp': val['photo_ktp'],
+                  'link_selfie': val['photo_selfie']})
+
+
+# load the model
+print('Loading model...')
 model = DenseNet(**{"k": 32,
         "weight_decay": 0.01,
         "num_outputs": 32,
@@ -30,60 +68,21 @@ checkpoint_directory = "./model"
 checkpoint_prefix = os.path.join(checkpoint_directory, "ckpt")
 
 checkpoint = tf.train.Checkpoint(model=model)
-checkpoint.restore(tf.train.latest_checkpoint(checkpoint_directory))
+status = checkpoint.restore(tf.train.latest_checkpoint(checkpoint_directory)).expect_partial()
 
-# TODO: DETERMINE IMAGES PATH HERE
-# NOTE: AT LEAST, THERE ARE TWO IMAGES FOR SELFIE AND CARD!
-PATHS_SELFIE = ['./faces/syahrul_selfie.jpg',
-                './faces/syahrul_selfie_2.jpg',
-                './faces/syahrul_selfie_3.jpg',
-                './faces/elon_selfie.jpg',
-                './faces/elon_selfie_2.jpg',
-                './faces/elon_selfie_3.jpg',
-                ]
-PATHS_CARD = ['./faces/syahrul_ktp.jpg'] * len(PATHS_SELFIE)
-LABEL = 0  # must be a similar face
+print('Predicting ...')
+for user in users:
+    # predict
+    GX1 = model(np.array([user['face_selfie']], dtype=np.float32) / 255, training=False)
+    GX2 = model(np.array([user['face_ktp']], dtype=np.float32) / 255, training=False)
 
-# load images
-imgs_selfie = []
-imgs_card = []
+    loss, Dw = contrastive_loss(GX1, GX2, [1], margin=2.)
 
-for i in range(len(PATHS_SELFIE)):
-    img_selfie = cv2.imread(PATHS_SELFIE[i])
-    img_card = cv2.imread(PATHS_CARD[i])
+    print('{}: {:.3f}'.format(user['uid'], Dw[0].numpy()))
 
-    # convert BGR to RGB
-    img_selfie = cv2.cvtColor(img_selfie, cv2.COLOR_BGR2RGB)
-    img_card = cv2.cvtColor(img_card, cv2.COLOR_BGR2RGB)
-
-    imgs_selfie.append(img_selfie)
-    imgs_card.append(img_card)
-
-fig, ax = plt.subplots(ncols=len(PATHS_SELFIE), nrows=2, figsize=(16, 4))
-fig.subplots_adjust(hspace=0.3, wspace=0.2)
-for i in range(len(PATHS_SELFIE)):
-    ax[0][i].imshow(imgs_selfie[i])
-    ax[0][i].set_title('Selfie')
-    ax[0][i].set_axis_off()
-
-    ax[1][i].imshow(imgs_card[i])
-    ax[1][i].set_title('Card')
-    ax[1][i].set_axis_off()
-plt.show()
-
-GX1 = model(np.array(imgs_selfie, dtype=np.float32) / 255, training=False)
-GX2 = model(np.array(imgs_card, dtype=np.float32) / 255, training=False)
-
-loss, Dw = contrastive_loss(GX1, GX2, [LABEL], margin=2.)
-
-f, bx = plt.subplots(2, len(PATHS_SELFIE), figsize=(16, 4))
-f.subplots_adjust(hspace=0.3, wspace=0.2)
-for i in range(len(PATHS_SELFIE)):
-    bx[0][i].set_title('Sim: ' + str(Dw[i].numpy()))
-    bx[0][i].imshow(imgs_selfie[i])
-    bx[0][i].set_axis_off()
-
-    # bx[1][i].set_title("Label: " + str(LABEL))
-    bx[1][i].imshow(imgs_card[i])
-    bx[1][i].set_axis_off()
-plt.show()
+    # TODO: UPDATE FIRESTORE
+    doc_ref = db.collection(u'users').document(u'{}'.format(user['uid']))
+    doc_ref.set({
+        u'status': u'verified' if Dw[0].numpy() < 1 else u'rejected',
+        u'verification_score': u'{:.3f}'.format(Dw[0].numpy()),
+    })

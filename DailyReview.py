@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 
 # README: program ini dijalankan sehari sekali untuk melakukan verifikasi kepada semua user yang sedang waiting list
-
+# NOTE: program ini tidak digunakan lagi karena telah menggunakan API dengan Flask, silahkan buka main.py
 
 import requests
 import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore
 import os
-import shutil
 import FaceDetection as fd
 import cv2
-import tensorflow as tf
 from model.DenseNet import *
 import numpy as np
 
