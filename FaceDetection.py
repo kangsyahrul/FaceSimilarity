@@ -23,6 +23,7 @@ def getFaces(title, img_bgr, w_desired, h_desired):
     # detect all faces if any
     faces_raw = face_cascade.detectMultiScale(img_gray, 1.1, 4)
     faces_result = []
+    faces_coordinat = []
 
     # Draw the rectangle around each face
     for (x, y, w, h) in faces_raw:
@@ -47,10 +48,20 @@ def getFaces(title, img_bgr, w_desired, h_desired):
         x1, x2 = cx - dx, cx + dx
 
         if not (y1 < 0 or x1 < 0 or y2 > img_h or x2 > img_w):
-            image = np.copy(img_bgr[cy - dy:cy + dy, cx - dx:cx + dx])
+            image = np.copy(img_bgr[y1:y2, x1:x2])
             image = cv2.resize(image, (w_desired, h_desired))
             # cv2.imshow('Face: {}'.format(title), image)
             faces_result.append(image)
+            faces_coordinat.append((x1, y1))
 
         img_bgr = cv2.rectangle(img_bgr, (x, y), (x+w, y+h), (255, 0, 0), 2)
+    if title == 'Selfie' and len(faces_result) == 2:
+        # if selfie detect only two foto, return the above one
+        index, x_old, y_old = 0, img_w, img_h
+        for i in range(len(faces_coordinat)):
+            x, y = faces_coordinat[i]
+            if y < y_old:
+                y_old = y
+                index = i
+        return [faces_result[index], ]
     return faces_result

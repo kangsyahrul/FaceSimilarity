@@ -8,7 +8,7 @@
 # ==================================================================================================== #
 
 # IMPORT
-from flask import Flask, render_template, request, Response
+from flask import Flask, request, Response
 import json
 import requests
 import firebase_admin
@@ -31,6 +31,7 @@ WIDTH_DESIRED, HEIGHT_DESIRED = 128, 128
 cred = credentials.Certificate('serviceAccount.json')
 firebase_admin.initialize_app(cred)
 db = firestore.client()
+FCM_KEY = "AAAAWOAwL2c:APA91bFtSCB-VdaOmBTB2MK74RioueWPyasVefy2XNCk3dJJIc9a7369KLIk-U2XatL5s-xVN2Hlr4PrWExTH1Ghw9dqs1xyR0IwTHWULl8wzTpGuVp6HwCjLg8Jkp4cVrREzRVdvDEn"
 
 # BUILD 'PHOTOS' DIRECTORY if not exists
 if not os.path.exists('photos'):
@@ -97,18 +98,55 @@ def home():
 
 def deletePhotos(user_id):
     _path_0 = os.path.join('photos', user_id)
-    for file in os.listdir(_path_0):
-        _path_1 = os.path.join(_path_0, file)
-        os.remove(_path_1)
-        print('Deleted: ', _path_1)
-    os.rmdir(_path_0)
-    print('Deleted: ', _path_0)
+    if os.path.exists(_path_0):
+        # DELETE PHOTOS
+        for file in os.listdir(_path_0):
+            _path_1 = os.path.join(_path_0, file)
+            os.remove(_path_1)
+            print('Deleted: ', _path_1)
+        os.rmdir(_path_0)
+        print('Deleted: ', _path_0)
 
 
 def verifyFailed(user_id, reason):
-    deletePhotos(user_id)
+    # deletePhotos(user_id)
     js = {'user_id': user_id, 'is_success': False, 'verification_score': -1, 'message': reason}
     return Response(json.dumps(js), mimetype='application/json')
+
+
+def sendNotif(user_id, title, message):
+    # DOWNLOADING TOKEN
+    users_ref = db.collection('users').document(user_id)
+    user = users_ref.get().to_dict()
+    if user is None:
+        return 'Failed to send notification. User not found!'
+
+    url = "https://fcm.googleapis.com/fcm/send"
+    headers = {
+        "Authorization": "key=" + FCM_KEY,
+        "Content-Type": "application/json"
+    }
+
+    data = {
+        "to": user['token'],
+        "collapse_key": "type_a",
+        "notification": {"body": message, "title": title}
+    }
+
+    x = requests.post(url, data=json.dumps(data), headers=headers)
+    return x.text
+
+
+@app.route('/notification', methods=['GET'])
+def notification():
+    user_id = None
+    if request.method == 'GET':
+        user_id = request.args.get('user_id')
+
+    if user_id is None:
+        return 'ERROR: user_id is null'
+
+    return sendNotif(user_id, 'Judul Notifikasi', 'Lorem ipsum dolor sit amet')
 
 
 @app.route('/verify', methods=['GET'])
@@ -120,20 +158,35 @@ def verify():
         print('Downloading database...')
         users_ref = db.collection('waiting_list').document(user_id)
         val = users_ref.get().to_dict()
+        if val is None:
+            sendNotif(user_id, 'Verifikasi Gagal',
+                      'Maaf, anda belum mengupload foto selfie dan ktp anda')
+            return verifyFailed(user_id, 'Photos not found!')
+        print('Val: ', val)
 
         # CREATE FOLDER
         path = os.path.join('photos', user_id)
-        os.mkdir(path)
+        if not os.path.exists(path):
+            os.mkdir(path)
 
         # DOWNLOAD IMAGES
         print('Downloading Selfie: ', user_id)
         file_path = os.path.join(path, 'foto_selfie.jpg')
+        if 'photo_selfie' not in val:
+            print('ERROR: Could not verifying ktp photo for {}'.format(user_id))
+            print('ERROR MESSAGE: selfie photo not found!')
+            sendNotif(user_id, 'Verifikasi Gagal',
+                      'Maaf, data diri anda gagal diverifikasi. Anda belum mengupload foto selfie.')
+            return verifyFailed(user_id,
+                                'Could not verifying ktp photo. Selfie photo not found!')
         saveImage(file_path, requests.get(val['photo_selfie']))
         img_selfie = cv2.imread(file_path)
         face_selfie = fd.getFaces('Selfie', img_selfie, WIDTH_DESIRED, HEIGHT_DESIRED)
         if len(face_selfie) != 1:
-            print('WARNING: Could not verifying selfie photo for {}'.format(user_id))
-            print('WARNING MESSAGE: no face or multiple faces detected! Total: ', len(face_selfie))
+            print('ERROR: Could not verifying selfie photo for {}'.format(user_id))
+            print('ERROR MESSAGE: no face or multiple faces detected! Total: ', len(face_selfie))
+            sendNotif(user_id, 'Verifikasi Gagal',
+                      'Maaf, data diri anda gagal diverifikasi. Foto selfie anda tidak sesuai. Ditemukan {} wajah pada foto tersebut'.format(len(face_selfie)))
             return verifyFailed(user_id,
                                 'Could not verifying selfie photo. No face or multiple faces detected! Total: {}'
                                 .format(len(face_selfie)))
@@ -141,15 +194,25 @@ def verify():
         # download & save image: ktp
         print('Downloading KTP: ', user_id)
         file_path = os.path.join(path, 'foto_ktp.jpg')
+        if 'photo_ktp' not in val:
+            print('ERROR: Could not verifying ktp photo for {}'.format(user_id))
+            print('ERROR MESSAGE: selfie photo not found!')
+            sendNotif(user_id, 'Verifikasi Gagal',
+                      'Maaf, data diri anda gagal diverifikasi. Anda belum mengupload foto selfie.')
+            return verifyFailed(user_id,
+                                'Could not verifying ktp photo. Selfie photo not found!')
         saveImage(file_path, requests.get(val['photo_ktp']))
         img_ktp = cv2.imread(file_path)
         face_ktp = fd.getFaces('KTP', img_ktp, WIDTH_DESIRED, HEIGHT_DESIRED)
         if len(face_ktp) != 1:
-            print('WARNING: Could not verifying ktp photo for {}'.format(user_id))
-            print('WARNING MESSAGE: no face or multiple faces detected! Total: ', len(face_ktp))
+            print('ERROR: Could not verifying ktp photo for {}'.format(user_id))
+            print('ERROR MESSAGE: no face or multiple faces detected! Total: ', len(face_ktp))
+            sendNotif(user_id, 'Verifikasi Gagal',
+                      'Maaf, data diri anda gagal diverifikasi. Foto KTP anda tidak sesuai. Ditemukan {} wajah pada foto tersebut'.format(
+                          len(face_ktp)))
             return verifyFailed(user_id,
                                 'Could not verifying ktp photo. No face or multiple faces detected! Total: {}'
-                                .format(len(face_selfie)))
+                                .format(len(face_ktp)))
 
         # SAVE FACES
         print('Saving faces...')
@@ -174,10 +237,18 @@ def verify():
 
         # UPDATE FIRESTORE
         print('Updating firestore...')
-        db.collection(u'users').document(u'{}'.format(user_id)).set({
+        db.collection(u'users').document(u'{}'.format(user_id)).update({
             u'status': u'verified' if Dw[0].numpy() < 1 else u'rejected',
             u'verification_score': u'{:.3f}'.format(Dw[0].numpy()),
         })
+
+        # SEND NOTIFICATION
+        if Dw[0].numpy() < 1:
+            sendNotif(user_id, 'Verifikasi Berhasil',
+                      'Selamat, data diri anda berhasil diverifikasi. Hasil verifikasi: {:.3f}'.format(Dw[0].numpy()))
+        else:
+            sendNotif(user_id, 'Verifikasi Gagal',
+                      'Maaf, data diri anda gagal diverifikasi. Hasil verifikasi: {:.3f}'.format(Dw[0].numpy()))
 
         # return json
         print('Result: ', js)
