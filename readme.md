@@ -63,4 +63,4 @@ Merupakan sebuah kredensial agar program python dapat mengambil data dan mendown
 Merupakan sebuah kunci API pada FCM yang digunakan untuk mengirim notifikasi ke aplikasi android yang telah di integrasikan. Diperoleh dari halaman Firebase.
 3. Link Foto KTP dan Selfi
 Modifikasi konten pada Firebase Firestore seperti pada gambar dibawah ini
-![Struktur folder Firestore]('./image/firestore_directory.jpg')
+![Struktur folder Firestore](./image/firestore_directory.jpg)
